@@ -13,6 +13,7 @@ func SetupRoutes(app *fiber.App) {
 	// Middleware
 	api := app.Group("/api", logger.New())
 	api.Get("/", handler.Hello)
+	api.Get("/test/", middleware.Protected(), handler.ProtectedEndpointTest)
 
 	// Auth
 	auth := api.Group("/auth")
