@@ -6,7 +6,7 @@ import (
 	"log"
 
 	fiber "github.com/gofiber/fiber/v2"
-	// "github.com/gofiber/fiber/v2/middleware/cors"
+	cors "github.com/gofiber/fiber/v2/middleware/cors"
 )
 
 func main() {
@@ -17,7 +17,7 @@ func main() {
 		ServerHeader:  "Fiber",
 		AppName:       "App Name",
 	})
-	// app.Use(cors.New())
+	app.Use(cors.New())
 
 	database.ConnectDB()
 
