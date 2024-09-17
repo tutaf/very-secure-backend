@@ -9,6 +9,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/xlzd/gotp"
 )
 
 func hashPassword(password string) (string, error) {
@@ -58,6 +60,7 @@ func CreateUser(c *fiber.Ctx) error {
 	type NewUser struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`
+		Secret   string `json:"secret"`
 	}
 
 	db := database.DB
@@ -81,9 +84,13 @@ func CreateUser(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Couldn't create user", "errors": err.Error()})
 	}
 
+	// Generate a random secret key with a length of 16 characters
+	user.Secret = gotp.RandomSecret(16)
+
 	newUser := NewUser{
 		Email:    user.Email,
 		Username: user.Username,
+		Secret:   user.Secret,
 	}
 
 	return c.JSON(fiber.Map{"status": "success", "message": "Created user", "data": newUser})
