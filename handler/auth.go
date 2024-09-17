@@ -4,6 +4,8 @@ import (
 	"app/config"
 	"app/database"
 	"app/model"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"log"
 	"net/mail"
@@ -15,6 +17,42 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func GenerateRefreshToken(db *gorm.DB, user model.User) (string, error) {
+	tokenBytes := make([]byte, 64)
+	_, err := rand.Read(tokenBytes)
+	if err != nil {
+		return "", err
+	}
+
+	token := hex.EncodeToString(tokenBytes)
+	expiresAt := time.Now().Add(24 * time.Hour * 30) // 30 days expiration
+
+	refreshToken := model.RefreshToken{
+		Token:     token,
+		UserID:    user.ID,
+		ExpiresAt: expiresAt,
+	}
+
+	if err := db.Create(&refreshToken).Error; err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+func ValidateRefreshToken(db *gorm.DB, token string) (*model.RefreshToken, error) {
+	var refreshToken model.RefreshToken
+	if err := db.Where("token = ? AND expires_at > ?", token, time.Now()).First(&refreshToken).Error; err != nil {
+		return nil, err
+	}
+
+	return &refreshToken, nil
+}
+
+func DeleteExpiredTokens(db *gorm.DB) error {
+	return db.Where("expires_at < ?", time.Now()).Delete(&model.RefreshToken{}).Error
+}
 
 // CheckPasswordHash compare password with hash
 func CheckPasswordHash(password, hash string) bool {
@@ -80,7 +118,7 @@ func Login(c *fiber.Ctx) error {
 	} else {
 		userModel, err = getUserByUsername(identity)
 	}
-	
+
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Internal Server Error", "data": err})
 	} else if userModel == nil {
@@ -99,17 +137,34 @@ func Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Invalid identity or password", "data": nil})
 	}
 
-	token := jwt.New(jwt.SigningMethodHS256)
-
-	claims := token.Claims.(jwt.MapClaims)
-	claims["username"] = ud.Username
-	claims["user_id"] = ud.ID
-	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
-
-	t, err := token.SignedString([]byte(config.Config("SECRET")))
+	// generate JWT access token
+	jwtToken, err := generateJWT(*userModel)
 	if err != nil {
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to generate JWT", "data": err.Error()})
 	}
 
-	return c.JSON(fiber.Map{"status": "success", "message": "Success login", "data": t})
+	// generate refresh token
+	refreshToken, err := GenerateRefreshToken(database.DB, *userModel)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to generate refresh token", "data": err.Error()})
+	}
+
+	// return both tokens to the client
+	return c.JSON(fiber.Map{
+		"status":        "success",
+		"message":       "Success login",
+		"access_token":  jwtToken,
+		"refresh_token": refreshToken,
+	})
+}
+
+// helper function to generate JWT
+func generateJWT(user model.User) (string, error) {
+	token := jwt.New(jwt.SigningMethodHS256)
+	claims := token.Claims.(jwt.MapClaims)
+	claims["username"] = user.Username
+	claims["user_id"] = user.ID
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix() // token expires in 72 hours
+
+	return token.SignedString([]byte(config.Config("SECRET")))
 }
