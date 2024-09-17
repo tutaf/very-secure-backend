@@ -13,7 +13,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"username\" : \"gayfurry69\",\r\n    \"email\" : \"gayfurry69@gmail.com\",\r\n    \"password\" : \"verySecurePassword\"\r\n}",
+					"raw": "{\r\n    \"username\" : \"test\",\r\n    \"email\" : \"test@gmail.com\",\r\n    \"password\" : \"testtest\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -62,7 +62,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"email\" : \"gayfurry69@gmail.com\",\r\n    \"password\" : \"verySecurePassword\"\r\n}",
+					"raw": "{\r\n    \"identity\" : \"test@gmail.com\",\r\n    \"password\" : \"testtest\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
