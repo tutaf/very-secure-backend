@@ -60,12 +60,8 @@ func SetupRoutes(app *fiber.App) {
 		}
 	})
 
-	//app.Get("/", func(c *fiber.Ctx) error {
-	//	return c.Render("index", nil)
-	//})
-
 	app.Get("/auth/google", func(c *fiber.Ctx) error {
-		url := googleOauthConfig.AuthCodeURL("state", oauth2.AccessTypeOffline)
+		url := googleOauthConfig.AuthCodeURL("state", oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 		return c.Redirect(url)
 	})
 
@@ -80,7 +76,6 @@ func SetupRoutes(app *fiber.App) {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error while exchanging token", "data": nil})
 		}
 
-		fmt.Println(token)
 		client := googleOauthConfig.Client(context.Background(), token)
 
 		// Fetch user info from Google

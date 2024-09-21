@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/oauth2"
@@ -30,88 +29,91 @@ func jwtError(c *fiber.Ctx, err error) error {
 }
 
 func SendCookie(c *fiber.Ctx, accessToken, refreshToken string) error {
-	// Create JWT token
-	token := jwt.New(jwt.SigningMethodHS256)
+	// Set the access token in a cookie
+	accessCookie := new(fiber.Cookie)
+	accessCookie.Name = "access_token"
+	accessCookie.Value = accessToken
+	accessCookie.Expires = time.Now().Add(72 * time.Hour)
+	accessCookie.HTTPOnly = true
+	accessCookie.Secure = false
+	accessCookie.SameSite = "Lax"
 
-	// Add access token and refresh token to JWT claims
-	claims := token.Claims.(jwt.MapClaims)
-	claims["access_token"] = accessToken
-	claims["refresh_token"] = refreshToken
-	claims["exp"] = time.Now().Add(time.Hour * 72).Unix() // Set expiration time for JWT (72 hours)
+	// Set the refresh token in a cookie
+	refreshCookie := new(fiber.Cookie)
+	refreshCookie.Name = "refresh_token"
+	refreshCookie.Value = refreshToken
+	refreshCookie.Expires = time.Now().Add(168 * time.Hour)
+	refreshCookie.HTTPOnly = true // Prevents access from JavaScript
+	refreshCookie.Secure = false  // Ensure the cookie is sent only over HTTPS
+	refreshCookie.SameSite = "Lax"
+	fmt.Println("Refresh Token:", refreshToken)
 
-	// Sign the JWT token with a secret
-	jwtToken, err := token.SignedString([]byte(config.Config("SECRET")))
-	if err != nil {
-		return c.SendStatus(fiber.StatusInternalServerError)
-	}
-
-	// Set the JWT token in a cookie
-	cookie := new(fiber.Cookie)
-	cookie.Name = "google_auth_jwt"
-	cookie.Value = jwtToken
-	cookie.Expires = time.Now().Add(72 * time.Hour) // Set expiration time for the cookie (72 hours)
-	cookie.HTTPOnly = true                          // Prevents access from JavaScript
-	cookie.Secure = false                           // Ensure the cookie is sent only over HTTPS
-	cookie.SameSite = "Lax"
-
-	// Send the cookie to the client
-	c.Cookie(cookie)
+	// Send the cookies to the client
+	c.Cookie(accessCookie)
+	c.Cookie(refreshCookie)
 
 	return c.JSON(fiber.Map{"status": "success", "message": "Success login"})
 }
 
-type JwtClaims struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	Exp          int64  `json:"exp"`
-	IssuedAt     int64  `json:"iat"`
-	Issuer       string `json:"iss"`
-	Subject      string `json:"sub"`
-}
+func getTokensFromCookie(c *fiber.Ctx) (string, string, error) {
 
-func (c *JwtClaims) Valid() error {
-	now := time.Now().Unix()
-	if c.Exp < now {
-		return fmt.Errorf("token has expired")
+	accessToken := c.Cookies("access_token")
+	if accessToken == "" {
+		return "", "", fmt.Errorf("access token cookie not found")
 	}
-	if c.IssuedAt > now {
-		return fmt.Errorf("token is not yet valid")
-	}
-	return nil
-}
 
-func extractAccessTokenFromJWT(jwtToken string, secretKey string) (string, error) {
-	claims := &JwtClaims{}
-	token, err := jwt.ParseWithClaims(jwtToken, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(secretKey), nil
-	})
-	if err != nil || !token.Valid {
-		return "", fmt.Errorf("invalid token")
+	refreshToken := c.Cookies("refresh_token")
+	if refreshToken == "" {
+		return "", "", fmt.Errorf("refresh token cookie not found")
 	}
-	return claims.AccessToken, nil
-}
 
-func getTokenFromCookie(c *fiber.Ctx) (string, error) {
-	jwtToken := c.Cookies("google_auth_jwt")
-	if jwtToken == "" {
-		return "", fmt.Errorf("cookie not found")
-	}
-	accessToken, err := extractAccessTokenFromJWT(jwtToken, config.Config("SECRET"))
-	if err != nil {
-		return "", err
-	}
-	return accessToken, nil
+	return accessToken, refreshToken, nil
 }
 
 func FetchUserData(c *fiber.Ctx, googleOauthConfig *oauth2.Config) error {
 	c.Locals("status", "success")
 
-	token, err := getTokenFromCookie(c)
+	// Extract tokens from cookies
+	accessToken, refreshToken, err := getTokensFromCookie(c)
 	if err != nil {
 		c.Locals("status", "error")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Unauthorized"})
 	}
-	client := googleOauthConfig.Client(context.Background(), &oauth2.Token{AccessToken: token})
+
+	access_token := &oauth2.Token{
+		AccessToken: accessToken,
+		Expiry:      time.Now().Add(24 * time.Hour),
+	}
+
+	refresh_token := &oauth2.Token{
+		AccessToken: refreshToken,
+		Expiry:      time.Now().Add(168 * time.Hour),
+	}
+	fmt.Println("access_token Expiry Time:", access_token.Expiry)
+	if isTokenExpired(access_token) {
+		fmt.Println("Access token has expired.")
+		if isTokenExpired(refresh_token) {
+			fmt.Println("Refresh token has expired.")
+			new_access_token, err := refreshAccessToken(googleOauthConfig, refresh_token)
+			if err != nil {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Failed to refresh token"})
+			}
+			c.Cookie(&fiber.Cookie{
+				Name:  "access_token",
+				Value: new_access_token.AccessToken,
+			})
+
+			c.Cookie(&fiber.Cookie{
+				Name:  "refresh_token",
+				Value: new_access_token.RefreshToken,
+			})
+
+			accessToken = new_access_token.AccessToken
+		}
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Access/Refresh token have expired"})
+	}
+	// Use the access token to create the OAuth client
+	client := googleOauthConfig.Client(context.Background(), &oauth2.Token{AccessToken: accessToken})
 	resp, err := client.Get("https://www.googleapis.com/userinfo/v2/me")
 	if err != nil {
 		c.Locals("status", "error")
@@ -119,11 +121,29 @@ func FetchUserData(c *fiber.Ctx, googleOauthConfig *oauth2.Config) error {
 	}
 	defer resp.Body.Close()
 
+	// Decode the user info from the response
 	var userData map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&userData); err != nil {
 		c.Locals("status", "error")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error decoding response"})
 	}
 
+	// Return user data
 	return c.JSON(fiber.Map{"status": "success", "data": userData})
+}
+
+func isTokenExpired(token *oauth2.Token) bool {
+	return token.Expiry.Before(time.Now())
+}
+
+func refreshAccessToken(googleOauthConfig *oauth2.Config, token *oauth2.Token) (*oauth2.Token, error) {
+
+	tokenSource := googleOauthConfig.TokenSource(context.Background(), token)
+
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		return nil, fmt.Errorf("unable to refresh token: %v", err)
+	}
+
+	return newToken, nil
 }
