@@ -14,6 +14,7 @@ func SetupRoutes(app *fiber.App) {
 	api := app.Group("/api", logger.New())
 	api.Get("/", handler.Hello)
 	api.Get("/test/", middleware.Protected(), handler.ProtectedEndpointTest)
+	api.Get("/files/", middleware.Protected(), handler.GetFiles)
 
 	// Auth
 	auth := api.Group("/auth")

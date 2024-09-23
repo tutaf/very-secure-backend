@@ -185,12 +185,9 @@ func Login(c *fiber.Ctx) error {
 		SameSite: "Lax",                                                           // Helps prevent CSRF attacks
 	})
 
-	// return both tokens to the client
 	return c.JSON(fiber.Map{
-		"status":        "success",
-		"message":       "Success login",
-		"access_token":  jwtToken,
-		"refresh_token": refreshToken,
+		"status":  "success",
+		"message": "Success login",
 	})
 }
 
