@@ -7,8 +7,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 	"net/mail"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -25,8 +27,13 @@ func GenerateRefreshToken(db *gorm.DB, user model.User) (string, error) {
 		return "", err
 	}
 
+	refreshTokenLifetime, err := strconv.Atoi(config.Config("REFRESH_TOKEN_LIFETIME_HOURS"))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse refresh token lifetime: %v", err)
+	}
+
 	token := hex.EncodeToString(tokenBytes)
-	expiresAt := time.Now().Add(24 * time.Hour * 30) // 30 days expiration
+	expiresAt := time.Now().Add(time.Duration(refreshTokenLifetime) * time.Hour)
 
 	refreshToken := model.RefreshToken{
 		Token:     token,
@@ -149,6 +156,35 @@ func Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to generate refresh token", "data": err.Error()})
 	}
 
+	accessTokenLifetime, err := strconv.Atoi(config.Config("ACCESS_TOKEN_LIFETIME_SECONDS"))
+	if err != nil {
+		return fmt.Errorf("failed to parse access token lifetime: %v", err)
+	}
+
+	refreshTokenLifetime, err := strconv.Atoi(config.Config("REFRESH_TOKEN_LIFETIME_HOURS"))
+	if err != nil {
+		return fmt.Errorf("failed to parse refresh token lifetime: %v", err)
+	}
+
+	// set access and refresh tokens as an HTTP-only cookies
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",                                                   // Cookie name for access token
+		Value:    jwtToken,                                                         // The generated access token
+		Expires:  time.Now().Add(time.Duration(accessTokenLifetime) * time.Second), // Set expiry for access token
+		HTTPOnly: true,                                                             // Ensure it's not accessible via JavaScript
+		Secure:   false,                                                            // Should be true if using HTTPS
+		SameSite: "Lax",                                                            // Helps prevent CSRF attacks
+	})
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",                                                 // Cookie name for refresh token
+		Value:    refreshToken,                                                    // The generated refresh token
+		Expires:  time.Now().Add(time.Duration(refreshTokenLifetime) * time.Hour), // Set expiry for refresh token
+		HTTPOnly: true,                                                            // Ensure it's not accessible via JavaScript
+		Secure:   false,                                                           // Should be true if using HTTPS
+		SameSite: "Lax",                                                           // Helps prevent CSRF attacks
+	})
+
 	// return both tokens to the client
 	return c.JSON(fiber.Map{
 		"status":        "success",
@@ -209,13 +245,21 @@ func Refresh(c *fiber.Ctx) error {
 
 // helper function to generate JWT
 func generateJWT(user model.User) (string, error) {
+	// convert the token lifetime from string to integer
+	accessTokenLifetime, err := strconv.Atoi(config.Config("ACCESS_TOKEN_LIFETIME_SECONDS"))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse access token lifetime: %v", err)
+	}
+
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 	claims["username"] = user.Username
 	claims["user_id"] = user.ID
-	claims["exp"] = time.Now().Add(time.Hour * 72).Unix() // token expires in 72 hours
 
-	return token.SignedString([]byte(config.Config("SECRET")))
+	claims["exp"] = time.Now().Add(time.Duration(accessTokenLifetime) * time.Second).Unix()
+
+	secret := []byte(config.Config("SECRET"))
+	return token.SignedString(secret)
 }
 
 // helper function to delete/invalidate a refresh token
