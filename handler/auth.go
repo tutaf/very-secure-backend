@@ -158,6 +158,55 @@ func Login(c *fiber.Ctx) error {
 	})
 }
 
+// Refresh exchanges a valid refresh token for new access and refresh tokens
+func Refresh(c *fiber.Ctx) error {
+	type refreshRequest struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	var request refreshRequest
+	if err := c.BodyParser(&request); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid request", "error": err.Error()})
+	}
+
+	// validate the refresh token from the database
+	refreshTokenRecord, err := ValidateRefreshToken(database.DB, request.RefreshToken)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Invalid refresh token", "error": err.Error()})
+	}
+
+	// get the user associated with the refresh token
+	user, err := getUserByID(refreshTokenRecord.UserID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to retrieve user", "error": err.Error()})
+	}
+
+	// generate new JWT access token
+	newAccessToken, err := generateJWT(*user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to generate new access token", "error": err.Error()})
+	}
+
+	// generate new refresh token
+	newRefreshToken, err := GenerateRefreshToken(database.DB, *user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to generate new refresh token", "error": err.Error()})
+	}
+
+	// invalidate old refresh token by deleting it
+	if err := deleteRefreshToken(database.DB, refreshTokenRecord.Token); err != nil {
+		log.Println("Warning: Failed to invalidate old refresh token")
+	}
+
+	// Return new tokens to the client
+	return c.JSON(fiber.Map{
+		"status":        "success",
+		"message":       "Tokens refreshed successfully",
+		"access_token":  newAccessToken,
+		"refresh_token": newRefreshToken,
+	})
+}
+
 // helper function to generate JWT
 func generateJWT(user model.User) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
@@ -167,4 +216,18 @@ func generateJWT(user model.User) (string, error) {
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix() // token expires in 72 hours
 
 	return token.SignedString([]byte(config.Config("SECRET")))
+}
+
+// helper function to delete/invalidate a refresh token
+func deleteRefreshToken(db *gorm.DB, token string) error {
+	return db.Where("token = ?", token).Delete(&model.RefreshToken{}).Error
+}
+
+// helper function to get a user by ID
+func getUserByID(userID uint) (*model.User, error) {
+	var user model.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
