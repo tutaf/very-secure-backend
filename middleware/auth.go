@@ -31,7 +31,7 @@ func jwtError(c *fiber.Ctx, err error) error {
 	// Check if refresh token is valid
 	refreshToken := c.Cookies("refresh_token")
 	if refreshToken == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"status":  "error",
 			"message": "Missing a valid JWT and/or refresh token",
 			"data":    nil,
@@ -47,7 +47,7 @@ func jwtError(c *fiber.Ctx, err error) error {
 	// get the user associated with the refresh token
 	user, err := getUserByID(refreshTokenRecord.UserID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error while refreshing tokens: Failed to retrieve user", "error": err.Error()})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Error while refreshing tokens: Failed to retrieve user", "error": err.Error()})
 	}
 
 	// generate new JWT access token
@@ -101,7 +101,7 @@ func jwtError(c *fiber.Ctx, err error) error {
 		return []byte(config.Config("SECRET")), nil
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to parse new access token", "error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to parse newly generated access token", "error": err.Error()})
 	}
 
 	// Set the newly parsed token in Locals so it can be used in the rest of the request
