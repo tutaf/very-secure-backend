@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"golang.org/x/oauth2"
@@ -54,9 +55,15 @@ func SetupRoutes(app *fiber.App) {
 		}
 
 		if status == "success" {
-			return c.Render("main_page", nil)
+			// Return JSON response for success
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"status": "user_already_logged_in",
+			})
 		} else {
-			return c.Render("index", nil)
+			// Return JSON response for failure
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"status": "need_to_log_in",
+			})
 		}
 	})
 
@@ -92,6 +99,8 @@ func SetupRoutes(app *fiber.App) {
 
 		middleware.SendCookie(c, token.AccessToken, token.RefreshToken)
 
-		return c.Render("success", userInfo)
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"status": "successfully_logged_in",
+		})
 	})
 }

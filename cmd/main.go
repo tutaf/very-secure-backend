@@ -3,9 +3,10 @@ package main
 import (
 	"app/database"
 	"app/router"
+	"log"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
-	"log"
 )
 
 func main() {
