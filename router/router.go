@@ -45,13 +45,17 @@ func SetupRoutes(app *fiber.App) {
 
 		if err != nil {
 			fmt.Println("Failed to fetch user data:", err)
-			return c.Render("index", nil) // Render index if user data fetch fails
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"status": "failed_to_fetch_user_data",
+			})
 		}
 
 		status, ok := c.Locals("status").(string)
 		if !ok {
 			fmt.Println("Status not found in context or not a string")
-			return c.Render("index", nil)
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"status": "status_not_found",
+			})
 		}
 
 		if status == "success" {
