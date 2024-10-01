@@ -13,7 +13,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"username\" : \"gayfurry69\",\r\n    \"email\" : \"gayfurry69@gmail.com\",\r\n    \"password\" : \"verySecurePassword\"\r\n}",
+					"raw": "{\r\n    \"username\" : \"test\",\r\n    \"email\" : \"test@gmail.com\",\r\n    \"password\" : \"testtest\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -41,15 +41,6 @@
 					"listen": "test",
 					"script": {
 						"exec": [
-							"pm.test(\"Successful login request\", function () {\r",
-							"    pm.expect(pm.response.code).to.be.oneOf([200]);\r",
-							"    \r",
-							"    if (pm.response.code === 200) {\r",
-							"        var responseBody = pm.response.json();\r",
-							"\r",
-							"        pm.collectionVariables.set(\"access_token\", responseBody.data);\r",
-							"    }\r",
-							"});\r",
 							""
 						],
 						"type": "text/javascript",
@@ -62,7 +53,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"email\" : \"gayfurry69@gmail.com\",\r\n    \"password\" : \"verySecurePassword\"\r\n}",
+					"raw": "{\r\n    \"identity\" : \"test@gmail.com\",\r\n    \"password\" : \"testtest\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -121,7 +112,7 @@
 					"bearer": [
 						{
 							"key": "token",
-							"value": "{{access_token}}",
+							"value": "",
 							"type": "string"
 						}
 					]
@@ -136,6 +127,47 @@
 					"path": [
 						"api",
 						"test",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get files",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/files/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"files",
 						""
 					]
 				}
@@ -169,11 +201,6 @@
 		{
 			"key": "base_url",
 			"value": "http://localhost:3000",
-			"type": "string"
-		},
-		{
-			"key": "access_token",
-			"value": "",
 			"type": "string"
 		}
 	]
