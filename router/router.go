@@ -31,7 +31,7 @@ func SetupRoutes(app *fiber.App) {
 	api.Get("/files/", middleware.Protected(), handler.GetFiles)
 
 	// Auth
-	auth := api.Group("/authentication")
+	auth := api.Group("/auth")
 	auth.Post("/login", handler.Login)
 	auth.Post("/refresh", handler.Refresh)
 

@@ -2,22 +2,20 @@ package middleware
 
 import (
 	"app/config"
-  "encoding/json"
-  "context"
 	"app/database"
 	"app/model"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	jwtware "github.com/gofiber/contrib/jwt"
+	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 	"log"
 	"strconv"
-	"time"
-
-	jwtware "github.com/gofiber/contrib/jwt"
-	"github.com/gofiber/fiber/v2"
-	"golang.org/x/oauth2"
 	"time"
 )
 

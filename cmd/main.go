@@ -4,8 +4,9 @@ import (
 	"app/config"
 	"app/database"
 	"app/router"
-	"log"
+	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"log"
 )
 
 func main() {
@@ -15,7 +16,6 @@ func main() {
 		StrictRouting: true,
 		ServerHeader:  "Fiber",
 		AppName:       "App Name",
-		Views:         engine,
 	})
 
 	// CORS configuration
