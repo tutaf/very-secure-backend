@@ -3,14 +3,14 @@ package handler
 import (
 	"app/database"
 	"app/model"
-	"github.com/xlzd/gotp"
-	"strconv"
-	"time"
-
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/skip2/go-qrcode"
+	"github.com/xlzd/gotp"
 	"golang.org/x/crypto/bcrypt"
+	"strconv"
+	"time"
 )
 
 func hashPassword(password string) (string, error) {
@@ -61,6 +61,7 @@ func CreateUser(c *fiber.Ctx) error {
 		Username string `json:"username"`
 		Email    string `json:"email"`
 		Secret   string `json:"secret"`
+		QRCode   string `json:"qr_code"` // New field for QR code URL
 	}
 
 	db := database.DB
@@ -87,10 +88,24 @@ func CreateUser(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Couldn't create user", "errors": err.Error()})
 	}
 
+	// Generate a provisioning URI for the TOTP, used for QR code generation
+	uri := gotp.NewDefaultTOTP(user.Secret).ProvisioningUri(user.Email, "MyApp")
+
+	// Generate a QR code image for the provisioning URI and save it to a specific path
+	qrCodePath := "public/qr_codes/" + user.Username + "_qr.png" // Example path for QR code
+	err = qrcode.WriteFile(uri, qrcode.Medium, 256, qrCodePath)  // Using the function as you suggested
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Couldn't generate QR code", "errors": err.Error()})
+	}
+
+	// Build the public URL to return to the client
+	qrCodeURL := "/qr_codes/" + user.Username + "_qr.png"
+
 	newUser := NewUser{
 		Email:    user.Email,
 		Username: user.Username,
 		Secret:   user.Secret,
+		QRCode:   qrCodeURL, // Add the QR code URL
 	}
 
 	return c.JSON(fiber.Map{"status": "success", "message": "Created user", "data": newUser})
