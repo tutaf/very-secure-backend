@@ -3,14 +3,14 @@ package handler
 import (
 	"app/database"
 	"app/model"
+	"github.com/xlzd/gotp"
 	"strconv"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-
-	"github.com/xlzd/gotp"
 )
 
 func hashPassword(password string) (string, error) {
@@ -69,6 +69,9 @@ func CreateUser(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Review your input", "errors": err.Error()})
 	}
 
+	// Generate a random secret key with a length of 16 characters
+	user.Secret = gotp.RandomSecret(16)
+
 	validate := validator.New()
 	if err := validate.Struct(user); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Invalid request body", "errors": err.Error()})
@@ -84,9 +87,6 @@ func CreateUser(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Couldn't create user", "errors": err.Error()})
 	}
 
-	// Generate a random secret key with a length of 16 characters
-	user.Secret = gotp.RandomSecret(16)
-
 	newUser := NewUser{
 		Email:    user.Email,
 		Username: user.Username,
@@ -96,15 +96,17 @@ func CreateUser(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "success", "message": "Created user", "data": newUser})
 }
 
-// UpdateUser update user
 func UpdateUser(c *fiber.Ctx) error {
 	type UpdateUserInput struct {
-		Names string `json:"names"`
+		Names     string `json:"names"`
+		TwoFACode string `json:"two_fa_code"` // New field for TOTP code
 	}
+
 	var uui UpdateUserInput
 	if err := c.BodyParser(&uui); err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Review your input", "errors": err.Error()})
 	}
+
 	id := c.Params("id")
 	token := c.Locals("user").(*jwt.Token)
 
@@ -115,9 +117,21 @@ func UpdateUser(c *fiber.Ctx) error {
 	db := database.DB
 	var user model.User
 
-	db.First(&user, id)
+	if err := db.First(&user, id).Error; err != nil {
+		return c.Status(404).JSON(fiber.Map{"status": "error", "message": "User not found"})
+	}
+
+	// Verify the provided TOTP code
+	totp := gotp.NewDefaultTOTP(user.Secret) // Get the stored secret for TOTP
+	if !totp.Verify(uui.TwoFACode, time.Now().Unix()) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Invalid 2FA code"})
+	}
+
+	// Proceed with the update
 	user.Names = uui.Names
-	db.Save(&user)
+	if err := db.Save(&user).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Couldn't update user", "errors": err.Error()})
+	}
 
 	return c.JSON(fiber.Map{"status": "success", "message": "User successfully updated", "data": user})
 }
