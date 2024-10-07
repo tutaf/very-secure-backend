@@ -13,9 +13,9 @@ func main() {
 	app := fiber.New(fiber.Config{
 		Prefork:       true,
 		CaseSensitive: true,
-		StrictRouting: true,
-		ServerHeader:  "Fiber",
-		AppName:       "App Name",
+		StrictRouting: false,
+		ServerHeader:  "VerySecureHeader",
+		AppName:       "Very Secure Backend",
 	})
 
 	// CORS configuration
