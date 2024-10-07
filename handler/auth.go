@@ -191,6 +191,45 @@ func Login(c *fiber.Ctx) error {
 	})
 }
 
+// Logout clears the user's access and refresh tokens
+func Logout(c *fiber.Ctx) error {
+	// clear the access token by setting its value to an empty string
+	// and its expiration date to a past date
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",                 // Access token cookie
+		Value:    "",                             // Empty value to clear it
+		Expires:  time.Now().Add(-1 * time.Hour), // Set to a past time to expire it
+		HTTPOnly: true,                           // Same as before
+		Secure:   false,                          // Change to true if using HTTPS
+		SameSite: "Lax",                          // CSRF protection
+	})
+
+	// clear the refresh token
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",                // Refresh token cookie
+		Value:    "",                             // Empty value to clear it
+		Expires:  time.Now().Add(-1 * time.Hour), // Set to a past time to expire it
+		HTTPOnly: true,                           // Same as before
+		Secure:   false,                          // Change to true if using HTTPS
+		SameSite: "Lax",                          // CSRF protection
+	})
+
+	// delete the refresh token from the database
+	refreshToken := c.Cookies("refresh_token")
+	if refreshToken != "" {
+		if err := deleteRefreshToken(database.DB, refreshToken); err != nil {
+			// log the error without crashing the program
+			log.Println("Warning: Failed to delete refresh token from the database", err)
+		}
+	}
+
+	// respond with a success message
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "Successfully logged out",
+	})
+}
+
 // Refresh exchanges a valid refresh token for new access and refresh tokens
 func Refresh(c *fiber.Ctx) error {
 	type refreshRequest struct {
