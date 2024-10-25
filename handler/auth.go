@@ -3,9 +3,12 @@ package handler
 import (
 	"app/config"
 	"app/database"
+	"app/middleware"
 	"app/model"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -18,7 +21,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
+
+var googleOauthConfig = &oauth2.Config{
+	RedirectURL:  config.Config("REDIRECT_URL"),
+	ClientID:     config.Config("CLIENT_ID"),
+	ClientSecret: config.Config("CLIENT_SECRET"),
+	Scopes:       []string{"profile", "email"},
+	Endpoint:     google.Endpoint,
+}
 
 func GenerateRefreshToken(db *gorm.DB, user model.User) (string, error) {
 	tokenBytes := make([]byte, 64)
@@ -310,4 +323,39 @@ func getUserByID(userID uint) (*model.User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func GoogleAuth(c *fiber.Ctx) error {
+	url := googleOauthConfig.AuthCodeURL("state", oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
+	return c.Redirect(url)
+}
+
+func GoogleCallback(c *fiber.Ctx) error {
+	code := c.Query("code")
+	if code == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "No code provided", "data": nil})
+	}
+
+	token, err := googleOauthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error while exchanging token", "data": nil})
+	}
+
+	client := googleOauthConfig.Client(context.Background(), token)
+
+	// Fetch user info from Google
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error fetching user info", "data": nil})
+	}
+	defer resp.Body.Close()
+
+	var userInfo map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error decoding user info", "data": nil})
+	}
+
+	middleware.SendCookie(c, token.AccessToken, token.RefreshToken)
+
+	return c.Redirect(fmt.Sprintf("%s/home_page", config.Config("FRONTEND_URL")))
 }

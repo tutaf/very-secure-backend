@@ -4,8 +4,6 @@ import (
 	"app/config"
 	"app/handler"
 	"app/middleware"
-	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
@@ -32,6 +30,8 @@ func SetupRoutes(app *fiber.App) {
 
 	// Auth
 	auth := api.Group("/auth")
+	auth.Get("/google", handler.GoogleAuth)
+	auth.Get("/google/callback", handler.GoogleCallback)
 	auth.Post("/login", handler.Login)
 	auth.Post("/logout", handler.Logout)
 	auth.Post("/refresh", handler.Refresh)
@@ -48,66 +48,19 @@ func SetupRoutes(app *fiber.App) {
 
 		if err != nil {
 			fmt.Println("Failed to fetch user data:", err)
-			return c.Status(fiber.StatusOK).JSON(fiber.Map{
-				"status": "failed_to_fetch_user_data",
-			})
+			return c.Redirect(fmt.Sprintf("%s/home_page", config.Config("FRONTEND_URL")))
 		}
 
 		status, ok := c.Locals("status").(string)
 		if !ok {
 			fmt.Println("Status not found in context or not a string")
-			return c.Status(fiber.StatusOK).JSON(fiber.Map{
-				"status": "status_not_found",
-			})
+			return c.Redirect(fmt.Sprintf("%s/login", config.Config("FRONTEND_URL")))
 		}
 
 		if status == "success" {
-			// Return JSON response for success
-			return c.Status(fiber.StatusOK).JSON(fiber.Map{
-				"status": "user_already_logged_in",
-			})
+			return c.Redirect(fmt.Sprintf("%s/home_page", config.Config("FRONTEND_URL")))
 		} else {
-			// Return JSON response for failure
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"status": "need_to_log_in",
-			})
+			return c.Redirect(fmt.Sprintf("%s/login", config.Config("FRONTEND_URL")))
 		}
-	})
-
-	app.Get("/auth/google", func(c *fiber.Ctx) error {
-		url := googleOauthConfig.AuthCodeURL("state", oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
-		return c.Redirect(url)
-	})
-
-	app.Get("/auth/google/callback", func(c *fiber.Ctx) error {
-		code := c.Query("code")
-		if code == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "No code provided", "data": nil})
-		}
-
-		token, err := googleOauthConfig.Exchange(context.Background(), code)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error while exchanging token", "data": nil})
-		}
-
-		client := googleOauthConfig.Client(context.Background(), token)
-
-		// Fetch user info from Google
-		resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error fetching user info", "data": nil})
-		}
-		defer resp.Body.Close()
-
-		var userInfo map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Error decoding user info", "data": nil})
-		}
-
-		middleware.SendCookie(c, token.AccessToken, token.RefreshToken)
-
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"status": "successfully_logged_in",
-		})
 	})
 }
