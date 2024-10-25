@@ -33,5 +33,6 @@ func main() {
 	router.SetupRoutes(app)
 
 	// Start the server on port 3000
+	print(3456789)
 	log.Fatal(app.Listen(":3000"))
 }

@@ -48,19 +48,19 @@ func SetupRoutes(app *fiber.App) {
 
 		if err != nil {
 			fmt.Println("Failed to fetch user data:", err)
-			return c.Redirect("/home_page")
+			return c.Redirect(fmt.Sprintf("%s/home_page", config.Config("FRONTEND_URL")))
 		}
 
 		status, ok := c.Locals("status").(string)
 		if !ok {
 			fmt.Println("Status not found in context or not a string")
-			return c.Redirect("/login")
+			return c.Redirect(fmt.Sprintf("%s/login", config.Config("FRONTEND_URL")))
 		}
 
 		if status == "success" {
-			return c.Redirect("/home_page")
+			return c.Redirect(fmt.Sprintf("%s/home_page", config.Config("FRONTEND_URL")))
 		} else {
-			return c.Redirect("/login")
+			return c.Redirect(fmt.Sprintf("%s/login", config.Config("FRONTEND_URL")))
 		}
 	})
 }

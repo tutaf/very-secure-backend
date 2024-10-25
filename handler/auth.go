@@ -357,5 +357,5 @@ func GoogleCallback(c *fiber.Ctx) error {
 
 	middleware.SendCookie(c, token.AccessToken, token.RefreshToken)
 
-	return c.Redirect("/home_page")
+	return c.Redirect(fmt.Sprintf("%s/home_page", config.Config("FRONTEND_URL")))
 }
